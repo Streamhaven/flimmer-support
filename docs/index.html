@@ -1,1 +1,242 @@
-<!doctype html><meta charset="utf-8"><title>Flimmer Support</title><p>Dashboard folgt.</p>
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Flimmer Support</title>
+<style>
+  :root { --bg:#141414; --card:#1f1f1f; --raised:#2a2a2a; --line:#333; --text:#f2f2f2; --muted:#a8a8a8; --red:#e50914; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f4f4f4; --card:#fff; --raised:#f0f0f0; --line:#ddd; --text:#141414; --muted:#666; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { color:var(--red); letter-spacing:4px; font-weight:900; margin:0 0 4px; }
+  h2 { font-size:18px; margin:0 0 12px; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:14px; }
+  label { display:block; color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.5px; margin:12px 0 4px; text-transform:uppercase; }
+  input, select, textarea { width:100%; background:var(--raised); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:10px; font:inherit; }
+  textarea { min-height:80px; resize:vertical; }
+  input:focus, select:focus, textarea:focus { outline:2px solid var(--red); border-color:transparent; }
+  button { background:var(--red); color:#fff; border:0; border-radius:6px; padding:9px 16px; font:inherit; font-weight:700; cursor:pointer; }
+  button.ghost { background:var(--raised); color:var(--text); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:14px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { background:var(--raised); color:var(--text); border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-weight:600; }
+  .chip.on { background:var(--text); color:var(--bg); }
+  .msg { color:var(--muted); min-height:1.4em; margin-top:10px; }
+  .msg.err { color:#ff6b6b; }
+  .meta { color:var(--muted); font-size:13px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .badge { color:#fff; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:700; }
+  .s-open { background:var(--red); } .s-progress { background:#1565c0; } .s-done { background:#2e7d32; } .s-rejected { background:#757575; }
+  .text { white-space:pre-wrap; overflow-wrap:anywhere; margin:10px 0 0; }
+  .grid { display:grid; grid-template-columns: 180px 1fr; gap:10px; }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  a { color:var(--red); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>FLIMMER</h1>
+  <p class="sub">Support-Dashboard</p>
+
+  <section id="login" class="box" hidden>
+    <h2>Anmelden</h2>
+    <form id="login-form">
+      <label for="pw">Support-Passwort</label>
+      <input id="pw" type="password" autocomplete="current-password" required>
+      <div class="row">
+        <button>Anmelden</button>
+        <button type="button" class="ghost" id="to-change">Support-Passwort festlegen/ändern</button>
+      </div>
+      <div class="msg" id="login-msg"></div>
+    </form>
+  </section>
+
+  <section id="change" class="box" hidden>
+    <h2>Support-Passwort festlegen oder ändern</h2>
+    <p class="sub" style="margin:0">Nur mit deinem Admin-Zugang (E-Mail und Admin-Passwort aus <code>server/deploy.sh</code>). Danach sind alle Dashboards abgemeldet.</p>
+    <form id="change-form">
+      <label for="a-mail">Admin-E-Mail</label>
+      <input id="a-mail" type="email" autocomplete="username" required>
+      <label for="a-pw">Admin-Passwort</label>
+      <input id="a-pw" type="password" autocomplete="current-password" required>
+      <label for="n-pw">Neues Support-Passwort (mind. 8 Zeichen)</label>
+      <input id="n-pw" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="n-pw2">Neues Support-Passwort wiederholen</label>
+      <input id="n-pw2" type="password" autocomplete="new-password" minlength="8" required>
+      <div class="row">
+        <button>Speichern</button>
+        <button type="button" class="ghost" id="to-login">Zurück</button>
+      </div>
+      <div class="msg" id="change-msg"></div>
+    </form>
+  </section>
+
+  <section id="board" hidden>
+    <div class="bar">
+      <div class="chips" id="filters"></div>
+      <div class="row" style="margin:0">
+        <button class="ghost" id="reload">Aktualisieren</button>
+        <button class="ghost" id="logout">Abmelden</button>
+      </div>
+    </div>
+    <div class="msg" id="board-msg"></div>
+    <div id="list"></div>
+  </section>
+</main>
+
+<script>
+const API = "https://flimmer.tommybilly567.workers.dev";
+const STATUS = { open: "Offen", progress: "In Arbeit", done: "Erledigt", rejected: "Abgelehnt" };
+const KIND = { bug: "Fehler", idea: "Vorschlag" };
+const $ = (id) => document.getElementById(id);
+
+const store = {
+  get() { try { return localStorage.getItem("flimmer-admin") || ""; } catch { return ""; } },
+  set(v) { try { v ? localStorage.setItem("flimmer-admin", v) : localStorage.removeItem("flimmer-admin"); } catch {} },
+};
+let token = store.get();
+let tickets = [];
+let filter = "open";
+
+async function api(method, path, body) {
+  const r = await fetch(API + path, {
+    method,
+    headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401 && path !== "/admin/login") { token = ""; store.set(""); show("login"); }
+  if (!r.ok) throw new Error(data.error || "Fehler " + r.status);
+  return data;
+}
+
+function show(view) {
+  for (const v of ["login", "change", "board"]) $(v).hidden = v !== view;
+  if (view === "login") $("pw").focus();
+  if (view === "board") load();
+}
+
+function say(id, text, err = false) {
+  $(id).textContent = text;
+  $(id).classList.toggle("err", err);
+}
+
+$("login-form").onsubmit = async (e) => {
+  e.preventDefault();
+  say("login-msg", "Prüfe …");
+  try {
+    token = (await api("POST", "/admin/login", { password: $("pw").value })).token;
+    store.set(token);
+    $("pw").value = "";
+    say("login-msg", "");
+    show("board");
+  } catch (err) { say("login-msg", err.message, true); }
+};
+
+$("change-form").onsubmit = async (e) => {
+  e.preventDefault();
+  if ($("n-pw").value !== $("n-pw2").value) return say("change-msg", "Die neuen Passwörter stimmen nicht überein.", true);
+  say("change-msg", "Speichere …");
+  try {
+    await api("POST", "/admin/password", { email: $("a-mail").value, password: $("a-pw").value, new_password: $("n-pw").value });
+    e.target.reset();
+    token = ""; store.set("");
+    say("change-msg", "");
+    say("login-msg", "Support-Passwort gespeichert. Jetzt damit anmelden.");
+    show("login");
+  } catch (err) { say("change-msg", err.message, true); }
+};
+
+$("to-change").onclick = () => show("change");
+$("to-login").onclick = () => show("login");
+$("reload").onclick = () => load();
+$("logout").onclick = async () => {
+  try { await api("POST", "/admin/logout"); } catch {}
+  token = ""; store.set(""); show("login");
+};
+
+async function load() {
+  say("board-msg", "Lade …");
+  try {
+    tickets = await api("GET", "/admin/tickets");
+    say("board-msg", "");
+    render();
+  } catch (err) { say("board-msg", err.message, true); }
+}
+
+const fmt = (ms) => new Date(ms).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
+const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+
+function render() {
+  const counts = { all: tickets.length };
+  for (const t of tickets) counts[t.status] = (counts[t.status] || 0) + 1;
+  $("filters").replaceChildren(...[["open", "Offen"], ["progress", "In Arbeit"], ["done", "Erledigt"], ["rejected", "Abgelehnt"], ["all", "Alle"]]
+    .map(([k, label]) => el("button", {
+      className: "chip" + (filter === k ? " on" : ""),
+      textContent: `${label} (${counts[k] || 0})`,
+      onclick: () => { filter = k; render(); },
+    })));
+  const shown = tickets.filter((t) => filter === "all" || t.status === filter);
+  $("list").replaceChildren(...(shown.length ? shown.map(card) : [el("p", { className: "sub", textContent: "Keine Tickets." })]));
+}
+
+// Mail an den Nutzer im eigenen Mailprogramm vorbereiten (Ticket-Texte nur als Text, nie als HTML)
+function mailto(t) {
+  const quote = t.text.length > 400 ? t.text.slice(0, 400) + " …" : t.text;
+  const body = `Hallo,\n\ndanke für deine Meldung vom ${fmt(t.created)}:\n„${quote}“\n\nStand: ${STATUS[t.status]}\n` +
+    (t.reply ? `\n${t.reply}\n` : "") + `\nDen Stand siehst du auch in der App unter Einstellungen → Support.\n\nViele Grüße\nFlimmer`;
+  const subject = `Flimmer: Deine Meldung #${t.id} – ${STATUS[t.status]}`;
+  return `mailto:${encodeURIComponent(t.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function card(t) {
+  const status = el("select", {}, ...Object.entries(STATUS).map(([v, l]) => el("option", { value: v, textContent: l, selected: v === t.status })));
+  const reply = el("textarea", { value: t.reply, placeholder: "Antwort an den Nutzer (erscheint in der App)" });
+  const msg = el("div", { className: "msg" });
+  const save = async (notify) => {
+    msg.textContent = "Speichere …"; msg.classList.remove("err");
+    try {
+      await api("PATCH", "/admin/tickets/" + t.id, { status: status.value, reply: reply.value });
+      Object.assign(t, { status: status.value, reply: reply.value, updated: Date.now() });
+      if (notify) location.href = mailto(t);
+      render();
+    } catch (err) { msg.textContent = err.message; msg.classList.add("err"); }
+  };
+  const del = async () => {
+    if (!confirm(`Ticket #${t.id} endgültig löschen?`)) return;
+    try {
+      await api("DELETE", "/admin/tickets/" + t.id);
+      tickets = tickets.filter((x) => x !== t);
+      render();
+    } catch (err) { msg.textContent = err.message; msg.classList.add("err"); }
+  };
+  return el("article", { className: "box" },
+    el("div", { className: "meta" },
+      el("span", { className: "badge s-" + t.status, textContent: STATUS[t.status] }),
+      el("strong", { textContent: `#${t.id} ${KIND[t.kind] || t.kind}` }),
+      el("span", { textContent: t.email }),
+      el("span", { textContent: fmt(t.created) }),
+      t.version ? el("span", { textContent: "App " + t.version }) : ""),
+    el("p", { className: "text", textContent: t.text }),
+    el("div", { className: "grid" },
+      el("div", {}, el("label", { textContent: "Status" }), status),
+      el("div", {}, el("label", { textContent: "Antwort" }), reply)),
+    el("div", { className: "row" },
+      el("button", { textContent: "Speichern", onclick: () => save(false) }),
+      el("button", { className: "ghost", textContent: "Speichern & per Mail benachrichtigen", onclick: () => save(true) }),
+      el("button", { className: "ghost", textContent: "Löschen", onclick: del })),
+    msg);
+}
+
+show(token ? "board" : "login");
+</script>
+</body>
+</html>
